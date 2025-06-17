@@ -216,7 +216,7 @@ class MainGraph:
                     # 添加系统提示
                     messages = [SystemMessage(content=custom_system_prompt)] + state["messages"]
                     response = self.llm.invoke(messages)
-                    print(f"🤖 LLM响应: {response.content}")
+                    logging.info(f"🤖 LLM响应: {response.content}")
                     
                     if isinstance(response, AIMessage):
                         # 解析响应中的工具调用
@@ -280,8 +280,8 @@ class MainGraph:
                         if hasattr(response, "tool_calls") and response.tool_calls:
                             tool_call = response.tool_calls[0]
                             try:
-                                print(f"⚙️ 执行工具: {tool_call['name']}")
-                                print(f"📝 工具参数: {tool_call['args']}")
+                                logging.info(f"⚙️ 执行工具: {tool_call['name']}")
+                                logging.info(f"📝 工具参数: {tool_call['args']}")
                                 
                                 # 执行工具
                                 result = invoke_tool(tool_call["name"], tool_call["args"])
@@ -290,43 +290,50 @@ class MainGraph:
                                     tool_call_id=tool_call["id"]
                                 )
                                 state["messages"].append(tool_message)
+                                logger.info(f"✅ 工具执行成功 maingraph层: {result}")
                                 
                                 # 检查是否是登录成功，如果是则检查后续操作
                                 if tool_call["name"] in ["auto_login", "login_with_credentials"]:
-                                    if isinstance(result, dict) and result.get("status") == "success":
-                                        logger.info("✅ 登录成功，检查是否需要执行后续操作")
-                                        
-                                        # 检查用户输入是否包含后续操作意图
-                                        user_input = state.get("input", "")
-                                        if any(keyword in user_input for keyword in ['新建', '打印任务', '创建', '新增']):
-                                            logger.info("🎯 检测到新建打印任务意图，准备调用 rayware 图")
+                                    if isinstance(result, dict):
+                                        if result.get("status") == "success" and "designservice.sprintray.com" in result.get("current_url", ""):
+                                            logger.info("✅ 登录成功，检查是否需要执行后续操作")
                                             
-                                            # 添加一个新的用户消息来触发 rayware 图
-                                            rayware_message = HumanMessage(content="新建打印任务")
-                                            state["messages"].append(rayware_message)
+                                            # 检查用户输入是否包含后续操作意图
+                                            user_input = state.get("input", "")
+                                            if any(keyword in user_input for keyword in ['新建', '打印任务', '创建', '新增','新建打印']):
+                                                logger.info("🎯 检测到新建打印任务意图，准备调用 rayware 图")
+                                                
+                                                # 添加一个新的用户消息来触发 rayware 图
+                                                rayware_message = HumanMessage(content="新建打印任务")
+                                                state["messages"].append(rayware_message)
+                                                
+                                                # 调用 rayware 图
+                                                try:
+                                                    logger.info("🔄 调用 rayware 图处理新建打印任务")
+                                                    
+                                                    rayware_result = rayware_module_graph.invoke(state)
+                                                    
+                                                    # 更新状态
+                                                    if rayware_result:
+                                                        state.update(rayware_result)
+                                                        logger.info("✅ rayware 图执行完成")
+                                                    
+                                                except Exception as rayware_error:
+                                                    logger.error(f"❌ rayware 图执行失败: {rayware_error}")
+                                                    state["messages"].append(AIMessage(
+                                                        content=f"❌ 执行打印任务操作失败: {str(rayware_error)}"
+                                                    ))
                                             
-                                            # 调用 rayware 图
-                                            try:
-                                                logger.info("🔄 调用 rayware 图处理新建打印任务")
-                                                
-                                                rayware_result = rayware_module_graph.invoke(state)
-                                                
-                                                # 更新状态
-                                                if rayware_result:
-                                                    state.update(rayware_result)
-                                                    logger.info("✅ rayware 图执行完成")
-                                                
-                                            except Exception as rayware_error:
-                                                logger.error(f"❌ rayware 图执行失败: {rayware_error}")
+                                            elif any(keyword in user_input for keyword in ['历史', '查看', '最近']):
+                                                logger.info("🎯 检测到查看历史意图")
                                                 state["messages"].append(AIMessage(
-                                                    content=f"❌ 执行打印任务操作失败: {str(rayware_error)}"
+                                                    content="✅ 登录成功，准备查看打印历史"
                                                 ))
-                                        
-                                        elif any(keyword in user_input for keyword in ['历史', '查看', '最近']):
-                                            logger.info("🎯 检测到查看历史意图")
-                                    state["messages"].append(AIMessage(
-                                                content="✅ 登录成功，准备查看打印历史"
-                                    ))
+                                        else:
+                                            logger.error(f"❌ 登录失败: {result.get('message', '未知错误')}")
+                                            state["messages"].append(AIMessage(
+                                                content=f"❌ 登录失败: {result.get('message', '未知错误')}"
+                                            ))
                                 
                                 self.state_manager.update(state)
                                 
