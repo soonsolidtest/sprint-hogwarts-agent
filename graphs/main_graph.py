@@ -27,6 +27,8 @@ from tools.manual_append_message import manual_append_message
 
 logger = logging.getLogger(__name__)
 
+
+
 def manual_append_message(message_cls):
     def _append(state: Dict[str, Any]) -> Dict[str, Any]:
         print("\n🔄 节点流转: append_user -> preprocess")
@@ -102,6 +104,22 @@ def main_graph(state: Dict[str, Any]) -> Dict[str, Any]:
     
     # 如果是用户消息，调用 LLM
     if isinstance(last_message, HumanMessage):
+        # 检查是否是登录成功后的消息
+        if state.get("logged_in", False):
+            # 检测用户输入中的后续操作
+            user_input = last_message.content.lower()
+            if any(keyword in user_input for keyword in ['新建', '打印任务', '创建', '新增']):
+                # 创建新的 HumanMessage
+                new_message = HumanMessage(content="新建打印任务")
+                state["messages"].append(new_message)
+                # 调用 rayware_module_graph
+                return rayware_module_graph.invoke(state)
+            elif any(keyword in user_input for keyword in ['历史', '查看', '最近']):
+                # 创建新的 HumanMessage
+                new_message = HumanMessage(content="查看打印历史")
+                state["messages"].append(new_message)
+                # 调用 rayware_module_graph
+                return rayware_module_graph.invoke(state)
         return llm_call(state)
     
     # 如果是 AI 消息且包含工具调用，执行工具
@@ -292,6 +310,14 @@ class MainGraph:
                                 state["messages"].append(tool_message)
                                 logger.info(f"✅ 工具执行成功 maingraph层: {result}")
                                 
+                                # 处理工具结果
+                                tool_message = ToolMessage(
+                                    content=str(result),
+                                    tool_call_id=tool_call.get("id", "unknown")
+                                )
+                                state["messages"].append(tool_message)
+
+                                print("tool_call",tool_call)
                                 # 检查是否是登录成功，如果是则检查后续操作
                                 if tool_call["name"] in ["auto_login", "login_with_credentials"]:
                                     if isinstance(result, dict):
@@ -300,6 +326,7 @@ class MainGraph:
                                             
                                             # 检查用户输入是否包含后续操作意图
                                             user_input = state.get("input", "")
+                                            print("user_input",user_input    )
                                             if any(keyword in user_input for keyword in ['新建', '打印任务', '创建', '新增','新建打印']):
                                                 logger.info("🎯 检测到新建打印任务意图，准备调用 rayware 图")
                                                 

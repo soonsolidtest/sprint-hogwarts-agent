@@ -20,5 +20,6 @@ class MessagesState(TypedDict, total=False):
     user_input: str                     # 用户输入（别名）
     print_job_data: Dict[str, Any]      # 打印任务数据
     current_page: str                   # 当前页面
+    logged_in: bool                     # 是否已登录
 
 
