@@ -1263,14 +1263,14 @@ def _verify_login_success(driver: webdriver.Chrome, original_url: str, username:
         }
 
 @tool
-def auto_login(user_desc: str) -> str:
+def auto_login(user_desc: str) -> dict:
     """根据用户描述自动登录系统
     
     Args:
         user_desc: 用户描述，用于从配置中获取用户信息
         
     Returns:
-        str: 登录结果
+        dict: 登录结果
     """
     try:
         logger.info(f"[auto_login] 调用参数: user_desc={user_desc}")
@@ -1351,39 +1351,39 @@ def auto_login(user_desc: str) -> str:
         # 检查是否在登录页面
         if "login" in current_url.lower() or "auth" in current_url.lower():
             logger.error(f"[auto_login] 登录失败: 仍在登录页面 {current_url}")
-            return json.dumps({
+            return {
                 "status": "error",
                 "message": "登录失败: 仍在登录页面",
                 "current_url": current_url,
                 "page_title": page_title
-            })
+            }
             
         # 检查是否成功跳转到主页面
         if "designservice.sprintray.com" in current_url:
             logger.info(f"[auto_login] 登录成功: 已跳转到主页面 {current_url}")
-            return json.dumps({
+            return {
                 "status": "success",
                 "message": "登录成功",
                 "current_url": current_url,
                 "page_title": page_title
-            })
+            }
         else:
             logger.error(f"[auto_login] 登录失败: 未跳转到主页面 {current_url}")
-            return json.dumps({
+            return {
                 "status": "error",
                 "message": "登录失败: 未跳转到主页面",
                 "current_url": current_url,
                 "page_title": page_title
-            })
+            }
             
     except Exception as e:
         logger.error(f"[auto_login] 登录失败: {str(e)}")
-        return json.dumps({
+        return {
             "status": "error",
             "message": f"登录失败: {str(e)}",
             "current_url": driver.current_url if driver else "",
             "page_title": driver.title if driver else ""
-        })
+        }
 
 def _get_user_info(user_desc: str) -> dict:
     """

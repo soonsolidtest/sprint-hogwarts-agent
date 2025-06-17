@@ -25,7 +25,7 @@ def test_create_print_job():
             
         # 自动登录
         logger.info("正在执行自动登录...")
-        login_result = auto_login.invoke({})
+        login_result = auto_login.invoke({"user_desc": "wangyili"})
         if not login_result.get("status") == "success":
             raise Exception(f"登录失败: {login_result.get('message')}")
         
@@ -34,7 +34,8 @@ def test_create_print_job():
             "user_input": "患者：测试患者",
             "messages": [],
             "rayware_intent": None,
-            "last_error": None
+            "last_error": None,
+            "logged_in": True
         }
         
         # 调用创建打印任务节点
@@ -54,8 +55,8 @@ def test_create_print_job():
         logger.error(f"❌ 测试过程中发生错误: {str(e)}")
         traceback.print_exc()
     finally:
-        # 关闭 WebDriver
-        if 'driver' in locals():
+        # 关闭浏览器
+        if driver:
             driver.quit()
             logger.info("WebDriver 已关闭")
 
