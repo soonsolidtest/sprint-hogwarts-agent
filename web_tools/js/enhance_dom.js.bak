@@ -1,0 +1,421 @@
+/**
+ * enhance_dom.js
+ * 
+ * 此脚本用于增强网页DOM结构，为元素添加数据属性以支持自动化测试。
+ * 主要功能：
+ * 1. 为页面元素添加位置、尺寸、可见性等关键属性
+ * 2. 标记交互元素（如按钮、链接等）
+ * 3. 标记元素是否在视口中可见
+ * 4. 优化性能，使用缓存减少重复计算
+ * 
+ * 工作流程：
+ * 1. 克隆页面DOM
+ * 2. 递归遍历DOM树，为每个元素添加数据属性
+ * 3. 返回增强后的HTML字符串
+ * 
+ * 使用方法：
+ * 在浏览器环境中执行getPageSource()函数，可传入视口扩展参数
+ */
+
+function getPageSource(
+  viewportExpansion = 0 // 视口扩展大小，用于控制元素是否在视口内
+) {
+  // 记录函数开始执行时间
+  const startTime = performance.now();
+  
+  let highlightIndex = 0; // 高亮索引，用于标记可交互元素
+  const HIGHLIGHT_CONTAINER_ID = "playwright-highlight-container"; // 高亮容器ID，保留以维持兼容性
+
+  // ==================== 性能优化与缓存机制 ====================
+
+  // 添加顶层缓存机制，用于优化性能
+  const DOM_CACHE = {
+    boundingRects: new WeakMap(), // 存储元素边界矩形的缓存
+    computedStyles: new WeakMap(), // 存储计算样式的缓存
+    clearCache: () => {
+      DOM_CACHE.boundingRects = new WeakMap();
+      DOM_CACHE.computedStyles = new WeakMap();
+    }
+  };
+
+  // 测量DOM操作性能的辅助函数
+  function measureDomOperation(operation, name) {
+    return operation();
+  }
+
+  // 获取缓存的元素边界矩形，避免重复计算提高性能
+  function getCachedBoundingRect(element) {
+    if (!element) return null;
+
+    if (DOM_CACHE.boundingRects.has(element)) {
+      return DOM_CACHE.boundingRects.get(element);
+    }
+
+    let rect;
+    rect = element.getBoundingClientRect();
+
+    if (rect) {
+      DOM_CACHE.boundingRects.set(element, rect);
+    }
+    return rect;
+  }
+
+  // 获取缓存的计算样式，避免重复计算提高性能
+  function getCachedComputedStyle(element) {
+    if (!element) return null;
+
+    if (DOM_CACHE.computedStyles.has(element)) {
+      return DOM_CACHE.computedStyles.get(element);
+    }
+
+    let style;
+    style = window.getComputedStyle(element);
+
+    if (style) {
+      DOM_CACHE.computedStyles.set(element, style);
+    }
+    return style;
+  }
+
+  // ==================== 元素判断函数 ====================
+
+  /**
+   * 检查元素是否可见
+   * @param {Element} element - 要检查的元素
+   * @returns {boolean} - 元素是否可见
+   */
+  function isElementVisible(element) {
+    const style = getCachedComputedStyle(element);
+    return (
+      element.offsetWidth > 0 &&
+      element.offsetHeight > 0 &&
+      style.visibility !== "hidden" &&
+      style.display !== "none"
+    );
+  }
+
+  /**
+   * 检查元素是否是其位置的最顶层元素
+   * @param {Element} element - 要检查的元素
+   * @returns {boolean} - 元素是否是最顶层元素
+   */
+  function isTopElement(element) {
+    const rect = getCachedBoundingRect(element);
+
+    // 如果元素不在视口中，认为它是顶部元素
+    const isInViewport = (
+      rect.left < window.innerWidth &&
+      rect.right > 0 &&
+      rect.top < window.innerHeight &&
+      rect.bottom > 0
+    );
+
+    if (!isInViewport) {
+      return true;
+    }
+
+    // 找到正确的文档上下文和根元素
+    let doc = element.ownerDocument;
+
+    // 如果在iframe中，默认认为元素是顶部
+    if (doc !== window.document) {
+      return true;
+    }
+
+    // 对于Shadow DOM，需要在其自己的根上下文中检查
+    const shadowRoot = element.getRootNode();
+    if (shadowRoot instanceof ShadowRoot) {
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      try {
+        const topEl = measureDomOperation(
+          () => shadowRoot.elementFromPoint(centerX, centerY),
+          'elementFromPoint'
+        );
+        if (!topEl) return false;
+
+        let current = topEl;
+        while (current && current !== shadowRoot) {
+          if (current === element) return true;
+          current = current.parentElement;
+        }
+        return false;
+      } catch (e) {
+        return true;
+      }
+    }
+
+    // 对于视口中的元素，检查它们是否是最顶层的（通过从坐标获取元素并向上遍历）
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    try {
+      const topEl = document.elementFromPoint(centerX, centerY);
+      if (!topEl) return false;
+
+      let current = topEl;
+      while (current && current !== document.documentElement) {
+        if (current === element) return true;
+        current = current.parentElement;
+      }
+      return false;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  /**
+   * 检查元素是否可交互
+   * @param {Element} element - 要检查的元素
+   * @returns {boolean} - 元素是否可交互
+   */
+  function isInteractiveElement(element) {
+    // 基本交互元素和角色集合
+    const interactiveElements = new Set([
+      "a",
+      "button",
+      "details",
+      "embed",
+      "input",
+      "menu",
+      "menuitem",
+      "object",
+      "select",
+      "textarea",
+      "canvas",
+      "summary"
+    ]);
+
+    const interactiveRoles = new Set([
+      "button",
+      "menu",
+      "menuitem",
+      "link",
+      "checkbox",
+      "radio",
+      "slider",
+      "tab",
+      "tabpanel",
+      "textbox",
+      "combobox",
+      "grid",
+      "listbox",
+      "option",
+      "progressbar",
+      "scrollbar",
+      "searchbox",
+      "switch",
+      "tree",
+      "treeitem",
+      "spinbutton",
+      "tooltip",
+      "a-button-inner",
+      "a-dropdown-button",
+      "click",
+      "menuitemcheckbox",
+      "menuitemradio",
+      "a-button-text",
+      "button-text",
+      "button-icon",
+      "button-icon-only",
+      "button-text-icon-only",
+      "dropdown",
+      "combobox",
+    ]);
+
+    const tagName = element.tagName.toLowerCase();
+    const role = element.getAttribute("role");
+    const ariaRole = element.getAttribute("aria-role");
+    const tabIndex = element.getAttribute("tabindex");
+
+    // 检查特定类
+    const hasAddressInputClass = element.classList.contains(
+      "address-input__container__input"
+    );
+
+    // 基本角色/属性检查
+    const hasInteractiveRole =
+      hasAddressInputClass ||
+      interactiveElements.has(tagName) ||
+      interactiveRoles.has(role) ||
+      interactiveRoles.has(ariaRole) ||
+      (tabIndex !== null &&
+        tabIndex !== "-1" &&
+        element.parentElement?.tagName.toLowerCase() !== "body") ||
+      element.getAttribute("data-action") === "a-dropdown-select" ||
+      element.getAttribute("data-action") === "a-dropdown-button";
+
+    if (hasInteractiveRole) return true;
+
+    // 检查事件监听器
+    const hasClickHandler =
+      element.onclick !== null ||
+      element.getAttribute("onclick") !== null ||
+      element.hasAttribute("ng-click") ||
+      element.hasAttribute("@click") ||
+      element.hasAttribute("v-on:click");
+
+    // 安全获取事件监听器的辅助函数
+    function getEventListeners(el) {
+      try {
+        return window.getEventListeners?.(el) || {};
+      } catch (e) {
+        const listeners = {};
+        const eventTypes = [
+          "click",
+          "mousedown",
+          "mouseup",
+          "touchstart",
+          "touchend",
+          "keydown",
+          "keyup",
+          "focus",
+          "blur",
+        ];
+
+        for (const type of eventTypes) {
+          const handler = el[`on${type}`];
+          if (handler) {
+            listeners[type] = [{ listener: handler, useCapture: false }];
+          }
+        }
+        return listeners;
+      }
+    }
+
+    // 检查点击相关事件
+    const listeners = getEventListeners(element);
+    const hasClickListeners =
+      listeners &&
+      (listeners.click?.length > 0 ||
+        listeners.mousedown?.length > 0 ||
+        listeners.mouseup?.length > 0 ||
+        listeners.touchstart?.length > 0 ||
+        listeners.touchend?.length > 0);
+
+    // 检查ARIA属性
+    const hasAriaProps =
+      element.hasAttribute("aria-expanded") ||
+      element.hasAttribute("aria-pressed") ||
+      element.hasAttribute("aria-selected") ||
+      element.hasAttribute("aria-checked");
+
+    // 检查是否可编辑内容
+    const isContentEditable = element.getAttribute("contenteditable") === "true" ||
+      element.isContentEditable ||
+      element.id === "tinymce" ||
+      element.classList.contains("mce-content-body") ||
+      (element.tagName.toLowerCase() === "body" && element.getAttribute("data-id")?.startsWith("mce_"));
+
+    // 检查元素是否可拖动
+    const isDraggable =
+      element.draggable || element.getAttribute("draggable") === "true";
+
+    return (
+      hasAriaProps ||
+      hasClickHandler ||
+      hasClickListeners ||
+      isDraggable ||
+      isContentEditable
+    );
+  }
+
+  // ==================== 核心增强功能 ====================
+
+  /**
+   * 为元素添加增强属性数据
+   * @param {Element} element - 要增强的元素
+   */
+  function enhanceElement(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) return;
+
+    // 跳过高亮容器元素
+    if (element.id === HIGHLIGHT_CONTAINER_ID) {
+      return;
+    }
+
+    // 获取元素位置信息
+    const rect = getCachedBoundingRect(element);
+    
+    // 判断元素是否在视口内
+    let isInViewport = true;
+    if (rect) {
+      isInViewport = !(
+        rect.bottom < -viewportExpansion ||
+        rect.top > window.innerHeight + viewportExpansion ||
+        rect.right < -viewportExpansion ||
+        rect.left > window.innerWidth + viewportExpansion
+      );
+    }
+
+    // 添加位置属性
+    if (rect) {
+      element.setAttribute('data-top-left-x', rect.left);
+      element.setAttribute('data-top-left-y', rect.top);
+      element.setAttribute('data-bottom-right-x', rect.right);
+      element.setAttribute('data-bottom-right-y', rect.bottom);
+      element.setAttribute('data-width', rect.width);
+      element.setAttribute('data-height', rect.height);
+    }
+
+    // 添加可见性属性
+    const isVisible = isElementVisible(element);
+    element.setAttribute('data-visible', isVisible);
+
+    if (isVisible) {
+      // 添加顶层元素属性
+      const isTop = isTopElement(element);
+      element.setAttribute('data-top-element', isTop);
+
+      if (isTop) {
+        // 添加交互性属性
+        const isInteractive = isInteractiveElement(element);
+        element.setAttribute('data-interactive', isInteractive);
+
+        if (isInteractive) {
+          element.setAttribute('data-in-viewport', isInViewport);
+          element.setAttribute('data-highlight-index', highlightIndex++);
+        }
+      }
+    }
+
+    // 递归处理子元素
+    for (const child of element.children) {
+      enhanceElement(child);
+    }
+
+    // 处理Shadow DOM
+    if (element.shadowRoot) {
+      element.setAttribute('data-has-shadow-root', true);
+      for (const child of element.shadowRoot.children) {
+        enhanceElement(child);
+      }
+    }
+  }
+
+  // ==================== 主执行逻辑 ====================
+  
+  // 创建一个DOM副本以便修改
+  const bodyClone = document.body.cloneNode(true);
+  
+  // 递归增强body及其所有子元素
+  enhanceElement(bodyClone);
+  
+  // 在返回前清理缓存，释放内存
+  DOM_CACHE.clearCache();
+  
+  // 计算并打印方法总耗时
+  const endTime = performance.now();
+  const totalTime = endTime - startTime;
+  console.log(`【性能统计】getPageSource 方法总耗时: ${totalTime.toFixed(2)}ms`);
+  
+  // 将增强后的DOM转换为HTML字符串并返回
+  return bodyClone.outerHTML;
+};
+
+// 返回增强后的页面HTML字符串
+// return getPageSource();
+(function () {
+  return getPageSource();
+})();

@@ -1,0 +1,11 @@
+new_print_job:
+  keywords: ["新建", "打印任务", "新建打印任务"]
+  description: "用户想要创建新的打印任务"
+
+recent_print_jobs:
+  keywords: ["最近", "历史", "查看", "打印历史"]
+  description: "用户想要查看最近的打印任务"
+
+unknown:
+  keywords: []
+  description: "无法识别的意图" 

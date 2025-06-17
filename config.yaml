@@ -1,0 +1,127 @@
+# SprintRay Hogwarts Agent 统一配置文件
+# ================================================
+
+# LLM 配置
+llm:
+  api_key: sk-529fe0082c02450db98b1602a74a992a
+  api_base: https://api.deepseek.com/v1
+  model: deepseek-chat
+  temperature: 0
+  max_tokens: 2000
+
+# 系统配置
+system:
+  name: "Rayware测试助手"
+  description: "一位专注于Rayware系统测试的智能助手"
+  debug: true
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  timeout: 30  # 操作超时时间（秒）
+
+# 用户账号配置
+accounts:
+  - description: "user1"
+    url: "https://dev.account.sprintray.com/"
+    username: "zhufeng@sprintray.cn"
+    password: "xunshi@123"
+  - description: "wangyili"
+    url: "https://dev.account.sprintray.com/"
+    username: "wangyili@sprintray.cn"
+    password: "12345678Dev"
+
+# 浏览器配置
+browser:
+  type: "chrome"
+  headless: false
+  window_size: [1920, 1080]
+  implicit_wait: 10
+  page_load_timeout: 30
+
+# design service 系统配置
+design_service:
+  base_url: "https://dev.designservice.sprintray.com"
+  urls:
+    home: "https://dev.designservice.sprintray.com/home-screen"
+    rayware: "https://dev.designservice.sprintray.com/print-setup"
+    print_history: "https://dev.designservice.sprintray.com/print-history"
+    new_print_job: "https://dev.designservice.sprintray.com/print-setup"
+  page_indicators:
+    rayware_home: ["print-setup", "designservice.sprintray.com"]
+    print_setup: ["print-setup"]
+    print_history: ["print-history"]
+
+# 意图路由配置
+intent_routing:
+  new_print_job:
+    keywords: ["新建", "打印任务", "新建打印任务", "创建打印"]
+    description: "用户想要创建新的打印任务"
+
+  recent_print_jobs:
+    keywords: ["最近", "历史", "查看", "打印历史", "查看历史"]
+    description: "用户想要查看最近的打印任务"
+
+  login:
+    keywords: ["登录", "登陆", "用", "使用"]
+    description: "用户想要登录系统"
+
+  unknown:
+    keywords: []
+    description: "无法识别的意图"
+
+# 系统提示词
+system_prompt: |
+  你是一个专门用于测试SprintRay系统的智能助手。你的主要职责是：
+
+  1. 理解用户意图：
+     - 新建打印任务
+     - 查看打印历史
+     - 用户登录操作
+     - 其他Rayware相关操作
+
+  2. 处理用户请求：
+     - 使用自然语言交互
+     - 提供清晰的操作指导
+     - 准确执行用户指令
+
+  3. 网页操作规则：
+     - 优先使用智能点击和输入功能
+     - 使用id、xpath、text等多种方式定位元素
+     - 确保操作的准确性和稳定性
+     - 每次执行动作后，如果需要了解页面结构，可以调用 get_page_structure 工具
+
+  4. 登录工具使用：
+     - 当用户说"用[用户名]登录"时，使用 auto_login 工具
+     - 支持的用户：user1, wangyili
+     - 登录工具会自动处理整个登录流程
+
+  5. 错误处理：
+     - 提供清晰的错误提示
+     - 引导用户进行正确操作
+     - 保持会话的连续性
+
+  请使用自然、专业的语言与用户交流，避免使用技术术语。
+  如果用户的请求不明确，主动询问并引导用户提供更多信息。
+
+# 工具配置
+tools:
+  selenium:
+    enabled: true
+    implicit_wait: 10
+    explicit_wait: 30
+  
+  smart_click:
+    enabled: true
+    max_retries: 3
+    wait_time: 5
+  
+  login:
+    enabled: true
+    auto_detect: true
+    default_url: "https://dev.account.sprintray.com/"
+
+# 日志配置
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/agent.log"
+  max_size: "10MB"
+  backup_count: 5

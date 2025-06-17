@@ -1,0 +1,6 @@
+openai
+langchain
+langchain_community
+selenium
+webdriver-manager
+python-dotenv

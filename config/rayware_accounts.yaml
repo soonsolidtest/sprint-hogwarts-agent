@@ -1,0 +1,9 @@
+accounts:
+  - url: "https://dev.account.sprintray.com/"
+    username: "zhufeng@sprintray.cn"
+    password: "boss@123"
+    description: "user1"
+  - url: "https://dev.account.sprintray.com/"
+    username: "user2"
+    password: "pass2"
+    description: "user2" 
