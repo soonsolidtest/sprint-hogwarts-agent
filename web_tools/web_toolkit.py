@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from enum import Enum
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
+import json
 
 # 配置日志 - 使用统一配置
 logger = logging.getLogger(__name__)
@@ -1262,78 +1263,127 @@ def _verify_login_success(driver: webdriver.Chrome, original_url: str, username:
         }
 
 @tool
-def auto_login(user_desc: str = None, **kwargs) -> dict:
+def auto_login(user_desc: str) -> str:
+    """根据用户描述自动登录系统
+    
+    Args:
+        user_desc: 用户描述，用于从配置中获取用户信息
+        
+    Returns:
+        str: 登录结果
     """
-    自动登录系统。用 description 匹配 config.yaml accounts，获取 url/username/password，按 continue-continue 流程登录。
-    """
-    logger.info(f"[auto_login] 调用参数: user_desc={user_desc}, kwargs={kwargs}")
     try:
-        if not user_desc:
-            raise Exception("未提供用户描述")
-            
-        logger.info(f"[auto_login] 使用用户描述: {user_desc}")
+        logger.info(f"[auto_login] 调用参数: user_desc={user_desc}")
         
-        # 获取用户信息
-        user_info = _get_user_info(user_desc)
-        if not user_info:
-            raise Exception(f"未找到用户信息: {user_desc}")
-            
-        url = user_info.get("url")
-        username = user_info.get("username")
-        password = user_info.get("password")
-        
-        if not url or not username or not password:
-            raise Exception(f"用户信息不完整: {user_desc}")
-            
-        # 获取或初始化 driver
+        # 获取或初始化driver
         driver = get_driver()
         if not driver:
             raise Exception("无法初始化浏览器")
             
+        # 获取用户信息
+        logger.info(f"[auto_login] 使用用户描述: {user_desc}")
+        user_info = _get_user_info(user_desc)
+        if not user_info:
+            raise Exception(f"未找到用户信息: {user_desc}")
+            
+        # 打开登录页面
+        url = user_info.get('url')
+        if not url:
+            raise Exception("用户配置中缺少url")
+            
         logger.info(f"[auto_login] 打开登录页面: {url}")
         driver.get(url)
+        
+        # 输入用户名
+        username = user_info.get('username')
+        if not username:
+            raise Exception("用户配置中缺少username")
+            
+        logger.info(f"👤 输入用户名到 id='username': {username}")
+        username_input = driver.find_element(By.ID, "username")
+        if not username_input:
+            raise Exception("未找到用户名输入框")
+        logger.info(f"✅ 找到用户名输入框: id='username'")
+        username_input.click()
+        username_input.clear()
+        username_input.send_keys(username)
+        
+        # 点击第一个Continue按钮
+        logger.info("🚀 点击第一个 Continue 按钮")
+        continue_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Continue')]")
+        if not continue_button:
+            raise Exception("未找到Continue按钮")
+        logger.info("✅ 找到 Continue 按钮")
+        continue_button.click()
+        
+        # 等待密码输入框出现
         time.sleep(2)
         
-        # 1. 输入用户名
-        username_result = _input_username_by_id(driver, username)
-        if username_result["status"] != "success":
-            return username_result
+        # 输入密码
+        password = user_info.get('password')
+        if not password:
+            raise Exception("用户配置中缺少password")
             
-        # 2. 点击 continue
-        continue_result1 = _click_continue_button(driver, "第一个")
-        if continue_result1["status"] != "success":
-            return continue_result1
-            
-        # 3. 输入密码
-        password_result = _input_password_by_placeholder(driver, password)
-        if password_result["status"] != "success":
-            return password_result
-            
-        # 4. 点击 continue
-        continue_result2 = _click_continue_button(driver, "第二个")
-        if continue_result2["status"] != "success":
-            return continue_result2
-            
-        # 5. 检查登录是否成功
-        time.sleep(2)
+        logger.info("🔑 输入密码到密码输入框")
+        password_input = driver.find_element(By.CSS_SELECTOR, "input[type='password']")
+        if not password_input:
+            raise Exception("未找到密码输入框")
+        logger.info(f"✅ 找到密码输入框: input[type='password']")
+        password_input.click()
+        password_input.clear()
+        password_input.send_keys(password)
+        
+        # 点击第二个Continue按钮
+        logger.info("🚀 点击第二个 Continue 按钮")
+        continue_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Continue')]")
+        if not continue_button:
+            raise Exception("未找到Continue按钮")
+        logger.info("✅ 找到 Continue 按钮")
+        continue_button.click()
+        
+        # 等待页面加载
+        time.sleep(5)
+        
+        # 验证登录成功
         current_url = driver.current_url
-        if "login" in current_url.lower():
-            return {"status": "error", "message": "登录后仍在登录页，登录失败", "current_url": current_url}
+        page_title = driver.title
+        
+        # 检查是否在登录页面
+        if "login" in current_url.lower() or "auth" in current_url.lower():
+            logger.error(f"[auto_login] 登录失败: 仍在登录页面 {current_url}")
+            return json.dumps({
+                "status": "error",
+                "message": "登录失败: 仍在登录页面",
+                "current_url": current_url,
+                "page_title": page_title
+            })
             
-        return {
-            "status": "success",
-            "message": "登录成功",
-            "current_url": current_url,
-            "page_title": driver.title
-        }
+        # 检查是否成功跳转到主页面
+        if "designservice.sprintray.com" in current_url:
+            logger.info(f"[auto_login] 登录成功: 已跳转到主页面 {current_url}")
+            return json.dumps({
+                "status": "success",
+                "message": "登录成功",
+                "current_url": current_url,
+                "page_title": page_title
+            })
+        else:
+            logger.error(f"[auto_login] 登录失败: 未跳转到主页面 {current_url}")
+            return json.dumps({
+                "status": "error",
+                "message": "登录失败: 未跳转到主页面",
+                "current_url": current_url,
+                "page_title": page_title
+            })
+            
     except Exception as e:
         logger.error(f"[auto_login] 登录失败: {str(e)}")
-        return {
+        return json.dumps({
             "status": "error",
             "message": f"登录失败: {str(e)}",
-            "current_url": driver.current_url if driver else None,
-            "page_title": driver.title if driver else None
-        }
+            "current_url": driver.current_url if driver else "",
+            "page_title": driver.title if driver else ""
+        })
 
 def _get_user_info(user_desc: str) -> dict:
     """
