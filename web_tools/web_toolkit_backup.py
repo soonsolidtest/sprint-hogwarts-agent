@@ -84,7 +84,7 @@ def get_driver() -> webdriver.Chrome:
                 logger.info(f"✅ 框架内 ChromeDriver 初始化成功: {driver_path}")
                 driver_initialized = True
             else:
-                logger.info("ℹ️ 框架内未找到 ChromeDriver")
+                logger.info("ℹ️ 框架内未找到 ChromeDriver ")
 
         except Exception as e1:
             logger.warning(f"⚠️ 框架内 ChromeDriver 失败: {e1}")
