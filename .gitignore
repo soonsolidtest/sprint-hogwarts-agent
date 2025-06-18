@@ -1,0 +1,8 @@
+# Python 字节码和缓存目录
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+/*.pyc
+!/*.pyc
+/**/*.pyc
