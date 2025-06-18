@@ -1262,6 +1262,127 @@ def _verify_login_success(driver: webdriver.Chrome, original_url: str, username:
             "page_title": page_title
         }
 
+
+@tool
+def select_printer(param: dict) -> dict:
+    """
+    智能选择打印机。
+    参数:
+        param: 包含以下字段的字典:
+            - printer: 打印机名称或序列号
+            - printer_type: 打印机类型 ('connected' 或 'virtual')
+            - wait: 等待时间（秒）
+    """
+    logger.info(f"[select_printer] 调用参数: {param}")
+    driver = _driver
+
+    # 1. 获取参数
+    printer = param.get("printer", "")
+    printer_type = param.get("printer_type", "connected")  # 默认选择已连接打印机
+    wait_time = param.get("wait", 10)
+
+    if not printer:
+        return {
+            "success": False,
+            "message": "缺少必要的参数：printer"
+        }
+
+    # 2. 点击打印机选择下拉框
+    dropdown_result = smart_click.invoke({
+        "param": {
+            "selectors": [
+                {
+                    "by": "xpath",
+                    "value": "//printer-platform-list-v2//div[@class='position-relative']"
+                }
+            ],
+            "wait": wait_time
+        }
+    })
+
+    if not dropdown_result.get("success", False):
+        return {
+            "success": False,
+            "message": f"点击打印机选择下拉框失败: {dropdown_result.get('message', '')}"
+        }
+
+    # 3. 等待下拉框展开
+    time.sleep(3)
+
+    # 4. 根据打印机类型选择不同的选择器
+    if printer_type == "connected":
+        # 已连接打印机选择器
+        selectors = [
+            {
+                "by": "xpath",
+                "value": f"//mat-option//div[contains(@class, 'printer-name') and text()='{printer}']"
+            }
+        ]
+    else:
+        # 虚拟打印机选择器
+        selectors = [
+            {
+                "by": "xpath",
+                "value": f"//mat-option//img[@title='printer-text' and contains(@src,'{printer}_text')]"
+            }
+        ]
+
+    # 5. 智能滚动查找并选择打印机
+    max_scroll_attempts = 5
+    scroll_height = 100  # 每次滚动的高度
+    printer_clicked = False
+
+    for attempt in range(max_scroll_attempts):
+        for selector in selectors:
+            try:
+                logger.info(f"[select_printer] 尝试选择器: {selector}")
+                elements = driver.find_elements(selector["by"], selector["value"])
+
+                for element in elements:
+                    if element.is_displayed():
+                        # 滚动到元素位置
+                        driver.execute_script("arguments[0].scrollIntoView(true);", element)
+                        time.sleep(0.5)
+
+                        # 尝试点击
+                        try:
+                            element.click()
+                            printer_clicked = True
+                            logger.info(f"[select_printer] 成功选择打印机: {printer}")
+                            break
+                        except Exception as e:
+                            logger.error(f"[select_printer] 点击打印机失败: {str(e)}")
+                            continue
+
+                if printer_clicked:
+                    break
+
+            except Exception as e:
+                logger.error(f"[select_printer] 查找打印机失败: {str(e)}")
+                continue
+
+        if printer_clicked:
+            break
+
+        # 如果没找到，向下滚动下拉框内的内容
+        try:
+            dropdown_panel = driver.find_element(By.CLASS_NAME, "mat-select-panel")
+            driver.execute_script("arguments[0].scrollTop += arguments[1]", dropdown_panel, scroll_height)
+            time.sleep(1)  # 等待内容加载
+            logger.info(f"[select_printer] 下拉框内向下滚动，尝试次数: {attempt + 1}")
+        except Exception as e:
+            logger.error(f"[select_printer] 下拉框内滚动失败: {str(e)}")
+
+    if not printer_clicked:
+        return {
+            "success": False,
+            "message": f"无法找到或选择打印机: {printer}"
+        }
+
+    return {
+        "success": True,
+        "message": f"成功选择打印机: {printer}"
+    }
 @tool
 def auto_login(user_desc: str) -> dict:
     """根据用户描述自动登录系统
@@ -1608,10 +1729,6 @@ def create_new_print_job(param: dict) -> dict:
                         {
                             "by": "xpath",
                             "value": f"//div[contains(@class, 'type-name') and text()='{indication}']"
-                        },
-                        {
-                            "by": "xpath",
-                            "value": f"//div[contains(@class, 'indication-select')]//div[text()='{indication}']"
                         }
                     ],
                     "wait": 5
@@ -1640,10 +1757,6 @@ def create_new_print_job(param: dict) -> dict:
                         {
                             "by": "xpath",
                             "value": f"//span[contains(.,'{orientation}')]"
-                        },
-                        {
-                            "by": "xpath",
-                            "value": f"//div[contains(@class, 'orientation-select')]//div[text()='{orientation}']"
                         }
                     ],
                     "wait": 5
@@ -1655,262 +1768,256 @@ def create_new_print_job(param: dict) -> dict:
             # 验证是否选择成功
             try:
                 selected_orientation = WebDriverWait(driver, 2).until(
-                    EC.presence_of_element_located((By.XPATH, f"//div[contains(@class, 'type-name') and text()='{orientation}']"))
+                    EC.presence_of_element_located((By.XPATH, f"//div[contains(@class, 'info-container')]//span[contains(text(), '{orientation}')]"))
                 )
                 if not selected_orientation.is_displayed():
                     raise Exception("Orientation 选择后未显示")
                 print(f"[create_new_print_job] ✅ 成功选择 Orientation: {orientation}")
             except Exception as e:
                 raise Exception(f"Orientation 选择验证失败: {str(e)}")
-        
-        # 5. 设置 Support Raft
-        support_raft = param.get("support_raft", False)
-        if support_raft:
-            raft_result = smart_click.invoke({
-                "param": {
-                    "selectors": [
-                        {
-                            "by": "xpath",
-                            "value": "//div[contains(@class, 'support-raft-toggle')]//input[@type='checkbox']"
-                        }
-                    ],
-                    "wait": 5
-                }
-            })
-            if raft_result.get("status") != "success":
-                raise Exception(f"设置 Support Raft 失败: {raft_result.get('message')}")
-            
-            # 验证是否设置成功
-            try:
-                raft_checkbox = WebDriverWait(driver, 2).until(
-                    EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'support-raft-toggle')]//input[@type='checkbox']"))
-                )
-                if not raft_checkbox.is_selected():
-                    raise Exception("Support Raft 设置后未选中")
-                print("[create_new_print_job] ✅ 成功设置 Support Raft")
-            except Exception as e:
-                raise Exception(f"Support Raft 设置验证失败: {str(e)}")
-        
+
         # 6. 选择 Printer
         printer = param.get("printer", "")
         if printer:
-            printer_result = smart_click.invoke({
+            printer_result = select_printer.invoke({
                 "param": {
-                    "selectors": [
-                        {
-                            "by": "xpath",
-                            "value": f"//div[contains(@class, 'type-name') and text()='{printer}']"
-                        },
-                        {
-                            "by": "xpath",
-                            "value": f"//div[contains(@class, 'printer-select')]//div[text()='{printer}']"
-                        }
-                    ],
-                    "wait": 5
+                    "printer": "Midas",
+                    "printer_type":"virtual"
                 }
             })
             if printer_result.get("status") != "success":
                 raise Exception(f"选择 Printer 失败: {printer_result.get('message')}")
-            
+
             # 验证是否选择成功
-            try:
-                selected_printer = WebDriverWait(driver, 2).until(
-                    EC.presence_of_element_located((By.XPATH, f"//div[contains(@class, 'type-name') and text()='{printer}']"))
-                )
-                if not selected_printer.is_displayed():
-                    raise Exception("Printer 选择后未显示")
-                print(f"[create_new_print_job] ✅ 成功选择 Printer: {printer}")
-            except Exception as e:
-                raise Exception(f"Printer 选择验证失败: {str(e)}")
+            # try:
+            #     selected_printer = WebDriverWait(driver, 2).until(
+            #         EC.presence_of_element_located(
+            #             (By.XPATH, f"//div[contains(@class, 'type-name') and text()='{printer}']"))
+            #     )
+            #     if not selected_printer.is_displayed():
+            #         raise Exception("Printer 选择后未显示")
+            #     print(f"[create_new_print_job] ✅ 成功选择 Printer: {printer}")
+            # except Exception as e:
+            #     raise Exception(f"Printer 选择验证失败: {str(e)}")
+            #
+        # 5. 设置 Support Raft
+        # support_raft = param.get("support_raft", False)
+        # if support_raft:
+        #     raft_result = smart_click.invoke({
+        #         "param": {
+        #             "selectors": [
+        #                 {
+        #                     "by": "xpath",
+        #                     "value": "//div[contains(@class, 'support-raft-toggle')]//input[@type='checkbox']"
+        #                 }
+        #             ],
+        #             "wait": 5
+        #         }
+        #     })
+        #     if raft_result.get("status") != "success":
+        #         raise Exception(f"设置 Support Raft 失败: {raft_result.get('message')}")
+        #
+        #     # 验证是否设置成功
+        #     try:
+        #         raft_checkbox = WebDriverWait(driver, 2).until(
+        #             EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'support-raft-toggle')]//input[@type='checkbox']"))
+        #         )
+        #         if not raft_checkbox.is_selected():
+        #             raise Exception("Support Raft 设置后未选中")
+        #         print("[create_new_print_job] ✅ 成功设置 Support Raft")
+        #     except Exception as e:
+        #         raise Exception(f"Support Raft 设置验证失败: {str(e)}")
+        #
+
         
         # 7. 选择 Build Platform
-        build_platform = param.get("build_platform", "")
-        if build_platform:
-            platform_result = smart_click.invoke({
-                "param": {
-                    "selectors": [
-                        {
-                            "by": "xpath",
-                            "value": f"//div[contains(@class, 'type-name') and text()='{build_platform}']"
-                        },
-                        {
-                            "by": "xpath",
-                            "value": f"//div[contains(@class, 'build-platform-select')]//div[text()='{build_platform}']"
-                        }
-                    ],
-                    "wait": 5
-                }
-            })
-            if platform_result.get("status") != "success":
-                raise Exception(f"选择 Build Platform 失败: {platform_result.get('message')}")
-            
-            # 验证是否选择成功
-            try:
-                selected_platform = WebDriverWait(driver, 2).until(
-                    EC.presence_of_element_located((By.XPATH, f"//div[contains(@class, 'type-name') and text()='{build_platform}']"))
-                )
-                if not selected_platform.is_displayed():
-                    raise Exception("Build Platform 选择后未显示")
-                print(f"[create_new_print_job] ✅ 成功选择 Build Platform: {build_platform}")
-            except Exception as e:
-                raise Exception(f"Build Platform 选择验证失败: {str(e)}")
-        
-        # 8. 选择 Material
-        material = param.get("material", "")
-        if material:
-            material_result = smart_click.invoke({
-                "param": {
-                    "selectors": [
-                        {
-                            "by": "xpath",
-                            "value": f"//div[contains(@class, 'type-name') and text()='{material}']"
-                        },
-                        {
-                            "by": "xpath",
-                            "value": f"//div[contains(@class, 'material-select')]//div[text()='{material}']"
-                        }
-                    ],
-                    "wait": 5
-                }
-            })
-            if material_result.get("status") != "success":
-                raise Exception(f"选择 Material 失败: {material_result.get('message')}")
-            
-            # 验证是否选择成功
-            try:
-                selected_material = WebDriverWait(driver, 2).until(
-                    EC.presence_of_element_located((By.XPATH, f"//div[contains(@class, 'type-name') and text()='{material}']"))
-                )
-                if not selected_material.is_displayed():
-                    raise Exception("Material 选择后未显示")
-                print(f"[create_new_print_job] ✅ 成功选择 Material: {material}")
-            except Exception as e:
-                raise Exception(f"Material 选择验证失败: {str(e)}")
-        
-        # 9. 点击 Show Advanced 按钮（如果需要）
-        show_advanced = param.get("show_advanced", False)
-        if show_advanced:
-            advanced_result = smart_click.invoke({
-                "param": {
-                    "selectors": [
-                        {
-                            "by": "xpath",
-                            "value": "//button[contains(@class, 'show-advanced-btn')]"
-                        }
-                    ],
-                    "wait": 5
-                }
-            })
-            if advanced_result.get("status") != "success":
-                raise Exception(f"点击 Show Advanced 按钮失败: {advanced_result.get('message')}")
-            
-            # 验证是否展开成功
-            try:
-                advanced_section = WebDriverWait(driver, 2).until(
-                    EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'advanced-settings')]"))
-                )
-                if not advanced_section.is_displayed():
-                    raise Exception("Advanced 设置未展开")
-                print("[create_new_print_job] ✅ 成功点击 Show Advanced 按钮")
-            except Exception as e:
-                raise Exception(f"Advanced 设置展开验证失败: {str(e)}")
-            
-            # 设置高级选项
-            layer_thickness = param.get("layer_thickness")
-            if layer_thickness:
-                # 输入 Layer Thickness
-                layer_input = driver.find_element(By.XPATH, "//input[contains(@class, 'layer-thickness-input')]")
-                layer_input.clear()
-                layer_input.send_keys(str(layer_thickness))
-                print(f"[create_new_print_job] ✅ 成功设置 Layer Thickness: {layer_thickness}")
-            
-            fit_offset = param.get("fit_offset")
-            if fit_offset is not None:
-                # 输入 Fit Offset
-                offset_input = driver.find_element(By.XPATH, "//input[contains(@class, 'fit-offset-input')]")
-                offset_input.clear()
-                offset_input.send_keys(str(fit_offset))
-                print(f"[create_new_print_job] ✅ 成功设置 Fit Offset: {fit_offset}")
-            
-            mesh_repair = param.get("mesh_repair")
-            if mesh_repair is not None:
-                # 设置 Mesh Repair
-                mesh_checkbox = driver.find_element(By.XPATH, "//input[contains(@class, 'mesh-repair-checkbox')]")
-                if mesh_checkbox.is_selected() != mesh_repair:
-                    mesh_checkbox.click()
-                print(f"[create_new_print_job] ✅ 成功设置 Mesh Repair: {mesh_repair}")
-            
-            supports = param.get("supports")
-            if supports is not None:
-                # 设置 Supports
-                supports_checkbox = driver.find_element(By.XPATH, "//input[contains(@class, 'supports-checkbox')]")
-                if supports_checkbox.is_selected() != supports:
-                    supports_checkbox.click()
-                print(f"[create_new_print_job] ✅ 成功设置 Supports: {supports}")
-            
-            orientation_advanced = param.get("orientation_advanced")
-            if orientation_advanced is not None:
-                # 设置 Orientation Advanced
-                orientation_checkbox = driver.find_element(By.XPATH, "//input[contains(@class, 'orientation-advanced-checkbox')]")
-                if orientation_checkbox.is_selected() != orientation_advanced:
-                    orientation_checkbox.click()
-                print(f"[create_new_print_job] ✅ 成功设置 Orientation Advanced: {orientation_advanced}")
-            
-            layout = param.get("layout")
-            if layout is not None:
-                # 设置 Layout
-                layout_checkbox = driver.find_element(By.XPATH, "//input[contains(@class, 'layout-checkbox')]")
-                if layout_checkbox.is_selected() != layout:
-                    layout_checkbox.click()
-                print(f"[create_new_print_job] ✅ 成功设置 Layout: {layout}")
-        
-        # 10. 选择 File Source
-        file_source = param.get("file_source", "")
-        if file_source:
-            source_result = smart_click.invoke({
-                "param": {
-                    "selectors": [
-                        {
-                            "by": "xpath",
-                            "value": f"//div[contains(@class, 'type-name') and text()='{file_source}']"
-                        },
-                        {
-                            "by": "xpath",
-                            "value": f"//div[contains(@class, 'file-source-select')]//div[text()='{file_source}']"
-                        }
-                    ],
-                    "wait": 5
-                }
-            })
-            if source_result.get("status") != "success":
-                raise Exception(f"选择 File Source 失败: {source_result.get('message')}")
-            
-            # 验证是否选择成功
-            try:
-                selected_source = WebDriverWait(driver, 2).until(
-                    EC.presence_of_element_located((By.XPATH, f"//div[contains(@class, 'type-name') and text()='{file_source}']"))
-                )
-                if not selected_source.is_displayed():
-                    raise Exception("File Source 选择后未显示")
-                print(f"[create_new_print_job] ✅ 成功选择 File Source: {file_source}")
-            except Exception as e:
-                raise Exception(f"File Source 选择验证失败: {str(e)}")
-        
-        # 11. 点击 Create 按钮
-        create_result = smart_click.invoke({
-            "param": {
-                "selectors": [
-                    {
-                        "by": "xpath",
-                        "value": "//button[contains(@class, 'create-btn')]"
-                    }
-                ],
-                "wait": 5
-            }
-        })
-        if create_result.get("status") != "success":
-            raise Exception(f"点击 Create 按钮失败: {create_result.get('message')}")
-        
+        # build_platform = param.get("build_platform", "")
+        # if build_platform:
+        #     platform_result = smart_click.invoke({
+        #         "param": {
+        #             "selectors": [
+        #                 {
+        #                     "by": "xpath",
+        #                     "value": f"//div[contains(@class, 'type-name') and text()='{build_platform}']"
+        #                 },
+        #                 {
+        #                     "by": "xpath",
+        #                     "value": f"//div[contains(@class, 'build-platform-select')]//div[text()='{build_platform}']"
+        #                 }
+        #             ],
+        #             "wait": 5
+        #         }
+        #     })
+        #     if platform_result.get("status") != "success":
+        #         raise Exception(f"选择 Build Platform 失败: {platform_result.get('message')}")
+        #
+        #     # 验证是否选择成功
+        #     try:
+        #         selected_platform = WebDriverWait(driver, 2).until(
+        #             EC.presence_of_element_located((By.XPATH, f"//div[contains(@class, 'type-name') and text()='{build_platform}']"))
+        #         )
+        #         if not selected_platform.is_displayed():
+        #             raise Exception("Build Platform 选择后未显示")
+        #         print(f"[create_new_print_job] ✅ 成功选择 Build Platform: {build_platform}")
+        #     except Exception as e:
+        #         raise Exception(f"Build Platform 选择验证失败: {str(e)}")
+        #
+        # # 8. 选择 Material
+        # material = param.get("material", "")
+        # if material:
+        #     material_result = smart_click.invoke({
+        #         "param": {
+        #             "selectors": [
+        #                 {
+        #                     "by": "xpath",
+        #                     "value": f"//div[contains(@class, 'type-name') and text()='{material}']"
+        #                 },
+        #                 {
+        #                     "by": "xpath",
+        #                     "value": f"//div[contains(@class, 'material-select')]//div[text()='{material}']"
+        #                 }
+        #             ],
+        #             "wait": 5
+        #         }
+        #     })
+        #     if material_result.get("status") != "success":
+        #         raise Exception(f"选择 Material 失败: {material_result.get('message')}")
+        #
+        #     # 验证是否选择成功
+        #     try:
+        #         selected_material = WebDriverWait(driver, 2).until(
+        #             EC.presence_of_element_located((By.XPATH, f"//div[contains(@class, 'type-name') and text()='{material}']"))
+        #         )
+        #         if not selected_material.is_displayed():
+        #             raise Exception("Material 选择后未显示")
+        #         print(f"[create_new_print_job] ✅ 成功选择 Material: {material}")
+        #     except Exception as e:
+        #         raise Exception(f"Material 选择验证失败: {str(e)}")
+        #
+        # # 9. 点击 Show Advanced 按钮（如果需要）
+        # show_advanced = param.get("show_advanced", False)
+        # if show_advanced:
+        #     advanced_result = smart_click.invoke({
+        #         "param": {
+        #             "selectors": [
+        #                 {
+        #                     "by": "xpath",
+        #                     "value": "//button[contains(@class, 'show-advanced-btn')]"
+        #                 }
+        #             ],
+        #             "wait": 5
+        #         }
+        #     })
+        #     if advanced_result.get("status") != "success":
+        #         raise Exception(f"点击 Show Advanced 按钮失败: {advanced_result.get('message')}")
+        #
+        #     # 验证是否展开成功
+        #     try:
+        #         advanced_section = WebDriverWait(driver, 2).until(
+        #             EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'advanced-settings')]"))
+        #         )
+        #         if not advanced_section.is_displayed():
+        #             raise Exception("Advanced 设置未展开")
+        #         print("[create_new_print_job] ✅ 成功点击 Show Advanced 按钮")
+        #     except Exception as e:
+        #         raise Exception(f"Advanced 设置展开验证失败: {str(e)}")
+        #
+        #     # 设置高级选项
+        #     layer_thickness = param.get("layer_thickness")
+        #     if layer_thickness:
+        #         # 输入 Layer Thickness
+        #         layer_input = driver.find_element(By.XPATH, "//input[contains(@class, 'layer-thickness-input')]")
+        #         layer_input.clear()
+        #         layer_input.send_keys(str(layer_thickness))
+        #         print(f"[create_new_print_job] ✅ 成功设置 Layer Thickness: {layer_thickness}")
+        #
+        #     fit_offset = param.get("fit_offset")
+        #     if fit_offset is not None:
+        #         # 输入 Fit Offset
+        #         offset_input = driver.find_element(By.XPATH, "//input[contains(@class, 'fit-offset-input')]")
+        #         offset_input.clear()
+        #         offset_input.send_keys(str(fit_offset))
+        #         print(f"[create_new_print_job] ✅ 成功设置 Fit Offset: {fit_offset}")
+        #
+        #     mesh_repair = param.get("mesh_repair")
+        #     if mesh_repair is not None:
+        #         # 设置 Mesh Repair
+        #         mesh_checkbox = driver.find_element(By.XPATH, "//input[contains(@class, 'mesh-repair-checkbox')]")
+        #         if mesh_checkbox.is_selected() != mesh_repair:
+        #             mesh_checkbox.click()
+        #         print(f"[create_new_print_job] ✅ 成功设置 Mesh Repair: {mesh_repair}")
+        #
+        #     supports = param.get("supports")
+        #     if supports is not None:
+        #         # 设置 Supports
+        #         supports_checkbox = driver.find_element(By.XPATH, "//input[contains(@class, 'supports-checkbox')]")
+        #         if supports_checkbox.is_selected() != supports:
+        #             supports_checkbox.click()
+        #         print(f"[create_new_print_job] ✅ 成功设置 Supports: {supports}")
+        #
+        #     orientation_advanced = param.get("orientation_advanced")
+        #     if orientation_advanced is not None:
+        #         # 设置 Orientation Advanced
+        #         orientation_checkbox = driver.find_element(By.XPATH, "//input[contains(@class, 'orientation-advanced-checkbox')]")
+        #         if orientation_checkbox.is_selected() != orientation_advanced:
+        #             orientation_checkbox.click()
+        #         print(f"[create_new_print_job] ✅ 成功设置 Orientation Advanced: {orientation_advanced}")
+        #
+        #     layout = param.get("layout")
+        #     if layout is not None:
+        #         # 设置 Layout
+        #         layout_checkbox = driver.find_element(By.XPATH, "//input[contains(@class, 'layout-checkbox')]")
+        #         if layout_checkbox.is_selected() != layout:
+        #             layout_checkbox.click()
+        #         print(f"[create_new_print_job] ✅ 成功设置 Layout: {layout}")
+        #
+        # # 10. 选择 File Source
+        # file_source = param.get("file_source", "")
+        # if file_source:
+        #     source_result = smart_click.invoke({
+        #         "param": {
+        #             "selectors": [
+        #                 {
+        #                     "by": "xpath",
+        #                     "value": f"//div[contains(@class, 'type-name') and text()='{file_source}']"
+        #                 },
+        #                 {
+        #                     "by": "xpath",
+        #                     "value": f"//div[contains(@class, 'file-source-select')]//div[text()='{file_source}']"
+        #                 }
+        #             ],
+        #             "wait": 5
+        #         }
+        #     })
+        #     if source_result.get("status") != "success":
+        #         raise Exception(f"选择 File Source 失败: {source_result.get('message')}")
+        #
+        #     # 验证是否选择成功
+        #     try:
+        #         selected_source = WebDriverWait(driver, 2).until(
+        #             EC.presence_of_element_located((By.XPATH, f"//div[contains(@class, 'type-name') and text()='{file_source}']"))
+        #         )
+        #         if not selected_source.is_displayed():
+        #             raise Exception("File Source 选择后未显示")
+        #         print(f"[create_new_print_job] ✅ 成功选择 File Source: {file_source}")
+        #     except Exception as e:
+        #         raise Exception(f"File Source 选择验证失败: {str(e)}")
+        #
+        # # 11. 点击 Create 按钮
+        # create_result = smart_click.invoke({
+        #     "param": {
+        #         "selectors": [
+        #             {
+        #                 "by": "xpath",
+        #                 "value": "//button[contains(@class, 'create-btn')]"
+        #             }
+        #         ],
+        #         "wait": 5
+        #     }
+        # })
+        # if create_result.get("status") != "success":
+        #     raise Exception(f"点击 Create 按钮失败: {create_result.get('message')}")
+        #
         # 验证是否创建成功
         try:
             success_message = WebDriverWait(driver, 5).until(

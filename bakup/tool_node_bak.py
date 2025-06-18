@@ -11,8 +11,8 @@ from web_tools.web_toolkit import (
     auto_login,
     login_with_credentials,
     get_page_structure,
-    get_driver,
-    create_new_print_job
+    get_page_structure,
+    get_driver
 )
 from tools.action_parser import parse_action, create_tool_message
 from tools.should_continue import should_continue
@@ -32,8 +32,7 @@ TOOLS = [
     PrintJobTool(),
     auto_login,
     login_with_credentials,
-    get_page_structure,
-    create_new_print_job
+    get_page_structure
 ]
 
 # 使用函数名作为工具名称
@@ -46,8 +45,7 @@ TOOLS_BY_NAME = {
     "print_job": PrintJobTool(),
     "auto_login": auto_login,
     "login_with_credentials": login_with_credentials,
-    "get_page_structure": get_page_structure,
-    "create_new_print_job": create_new_print_job
+    "get_page_structure": get_page_structure
 }
 
 def invoke_tool(tool_name: str, tool_args: dict) -> dict:
@@ -108,19 +106,21 @@ def tool_node(state: MessagesState) -> dict:
                 tool_name = tool_call["name"]
                 args = tool_call["args"]
                 tool_call_id = tool_call["id"]
+                
                 logger.info(f"🔧 执行工具: {tool_name}")
+                
                 tool = TOOLS_BY_NAME.get(tool_name)
                 if not tool:
                     logger.error(f"❌ 未知工具: {tool_name}")
                     results.append(ToolMessage(content=f"[未知工具]: {tool_name}", tool_call_id=tool_call_id))
-                else:
-                    try:
+            else:
+                try:
                         obs = tool(**args)  # 使用解包参数的方式调用工具
                         logger.info(f"✅ 工具执行成功")
                         results.append(create_tool_message(obs, tool_call_id))
-                    except Exception as e:
-                            logger.error(f"❌ 工具执行失败: {e}")
-                            results.append(ToolMessage(content=f"[工具执行失败]: {e}", tool_call_id=tool_call_id))
+                except Exception as e:
+                        logger.error(f"❌ 工具执行失败: {e}")
+                        results.append(ToolMessage(content=f"[工具执行失败]: {e}", tool_call_id=tool_call_id))
     else:
         logger.warning("⚠️ 未找到动作块")
     

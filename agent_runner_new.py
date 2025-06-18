@@ -26,7 +26,7 @@ def main():
         state["messages"].append(human_message)
         state["input"] = text  # 更新输入内容
         print("提交前 state input：", state["input"])
-        out = main_graph.process(state)
+        out = main_graph.process(state) 
 
         state = out  # LangGraph 会返回新的完整 state
         if (state["messages"]):

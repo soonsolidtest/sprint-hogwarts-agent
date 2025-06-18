@@ -47,6 +47,7 @@ def preprocess_input(state: Dict[str, Any]) -> Dict[str, Any]:
 def main():
     """主函数"""
     print("\n🚀 [Main Graph] 开始执行主函数")
+    logger.info("🚀 [Main Graph] 开始执行主函数")
     
     accounts = load_accounts()
     try:
@@ -327,7 +328,7 @@ class MainGraph:
                                             # 检查用户输入是否包含后续操作意图
                                             user_input = state.get("input", "")
                                             print("user_input",user_input    )
-                                            if any(keyword in user_input for keyword in ['新建', '打印任务', '创建', '新增','新建打印']):
+                                            if any(keyword in user_input for keyword in ['新建', '打印任务', '创建', '新增','新建打印','打印']):
                                                 logger.info("🎯 检测到新建打印任务意图，准备调用 rayware 图")
                                                 
                                                 # 添加一个新的用户消息来触发 rayware 图
