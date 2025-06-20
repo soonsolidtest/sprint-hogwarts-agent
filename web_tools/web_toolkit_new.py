@@ -1,6 +1,9 @@
-# Web Tools Package
-# 提供完整的 Web 自动化工具集
+"""
+Web Toolkit - 整合版本
+提供完整的 Web 自动化工具集，通过模块化设计提高可维护性
+"""
 
+# 导入所有模块的工具函数
 from .driver_management import get_driver, close_driver, get_current_driver
 from .basic_operations import (
     selenium_get,
@@ -10,8 +13,7 @@ from .basic_operations import (
     selenium_quit,
     _try_click_element,
     _ensure_element_visible,
-    _get_extended_selectors,
-    _display_find_element
+    _get_extended_selectors
 )
 from .smart_operations import (
     smart_click,
@@ -35,12 +37,23 @@ from .page_analysis import (
     wait_for_element
 )
 
-# 导出所有工具函数
+# 为了向后兼容，保留全局 WebDriver 实例的引用
+_driver = None
+
+def get_driver_compat():
+    """向后兼容的 get_driver 函数"""
+    global _driver
+    if _driver is None:
+        _driver = get_driver()
+    return _driver
+
+# 导出所有工具函数，保持与原始 web_toolkit.py 相同的接口
 __all__ = [
     # 驱动管理
     "get_driver",
     "close_driver", 
     "get_current_driver",
+    "get_driver_compat",
     
     # 基础操作
     "selenium_get",
@@ -51,7 +64,6 @@ __all__ = [
     "_try_click_element",
     "_ensure_element_visible",
     "_get_extended_selectors",
-    "_display_find_element",
     
     # 智能操作
     "smart_click",
@@ -67,10 +79,10 @@ __all__ = [
     "select_printer",
     "submit_print_job",
     "select_material",
-
+    
     # 页面分析
     "get_page_structure",
     "find_elements_by_text",
     "find_elements_by_selector",
     "wait_for_element"
-]
+] 

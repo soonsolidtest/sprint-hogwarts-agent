@@ -1,7 +1,9 @@
 from typing import Dict, Any, List
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, ToolMessage
 from state.types import MessagesState
-from web_tools.web_toolkit import (
+
+# 使用新的模块化工具
+from web_tools import (
     selenium_get,
     selenium_sendkeys,
     selenium_click,
@@ -11,8 +13,14 @@ from web_tools.web_toolkit import (
     login_with_credentials,
     get_page_structure,
     get_driver,
-    create_new_print_job
+    create_new_print_job,
+    smart_click,
+    smart_select_and_choose,
+    select_printer,
+    submit_print_job,
+    select_material
 )
+
 from tools.action_parser import parse_action, create_tool_message
 from tools.should_continue import should_continue
 import json
@@ -31,7 +39,12 @@ TOOLS = [
     auto_login,
     login_with_credentials,
     get_page_structure,
-    create_new_print_job
+    create_new_print_job,
+    smart_click,
+    smart_select_and_choose,
+    select_printer,
+    submit_print_job,
+    select_material
 ]
 
 # 使用函数名作为工具名称
@@ -44,7 +57,12 @@ TOOLS_BY_NAME = {
     "auto_login": auto_login,
     "login_with_credentials": login_with_credentials,
     "get_page_structure": get_page_structure,
-    "create_new_print_job": create_new_print_job
+    "create_new_print_job": create_new_print_job,
+    "smart_click": smart_click,
+    "smart_select_and_choose": smart_select_and_choose,
+    "select_printer": select_printer,
+    "submit_print_job": submit_print_job,
+    "select_material":select_material
 }
 
 def invoke_tool(tool_name: str, tool_args: dict) -> dict:

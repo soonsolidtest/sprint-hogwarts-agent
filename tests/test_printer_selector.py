@@ -7,7 +7,7 @@ import logging
 from unittest.mock import Mock, patch
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException
-from web_tools.web_toolkit import PrinterSelector
+# from web_tools.web_toolkit import PrinterSelector
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -18,10 +18,10 @@ def mock_driver():
     """创建模拟的 WebDriver"""
     return Mock(spec=WebDriver)
 
-@pytest.fixture
-def printer_selector(mock_driver):
-    """创建打印机选择器实例"""
-    return PrinterSelector(mock_driver)
+# @pytest.fixture
+# def printer_selector(mock_driver):
+#     """创建打印机选择器实例"""
+#     return PrinterSelector(mock_driver)
 
 def test_click_element_success(printer_selector, mock_driver):
     """测试成功点击元素"""

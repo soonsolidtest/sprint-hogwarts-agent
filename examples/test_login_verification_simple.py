@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from web_tools.web_toolkit import login_with_credentials
+from web_tools.login_tools import login_with_credentials
 import logging
 import time
 
@@ -24,12 +24,12 @@ def test_login_verification_optimization():
     start_time = time.time()
     
     try:
-        # 使用 invoke 方法调用工具
-        result = login_with_credentials.invoke({
-            "url": "https://dev.designservice.sprintray.com",
-            "username": "wangyili@sprintray.com",
-            "password": "xunshi@123"
-        })
+        # 使用原始函数体调用
+        result = login_with_credentials.func(
+            url="https://dev.account.sprintray.com/",
+            username="wangyili@sprintray.cn",
+            password="12345678Dev"
+        )
         
         # 记录结束时间
         end_time = time.time()
