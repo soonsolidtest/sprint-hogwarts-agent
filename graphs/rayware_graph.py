@@ -6,8 +6,18 @@ from tools.llm_call import llm_call
 from tools.should_continue import should_continue
 from graphs.unknown import unknown_graph
 from utils.intent_router import classify_rayware_intent
-from web_tools.web_toolkit import selenium_get, selenium_click, selenium_sendkeys, smart_click, create_new_print_job, \
-    submit_print_job
+
+# 使用新的模块化工具
+from web_tools import (
+    selenium_get, 
+    selenium_click, 
+    selenium_sendkeys, 
+    smart_click, 
+    create_new_print_job,
+    submit_print_job,
+    get_driver
+)
+
 from config import config
 import logging
 from selenium.webdriver.support.ui import WebDriverWait
@@ -31,6 +41,7 @@ class RaywareState(TypedDict):
 
 
 def init_rayware_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    logger.info("[Rayware] 初始化状态节点开始")
     """初始化 Rayware 状态"""
     logger.info("📍 初始化 Rayware 状态")
 
@@ -46,6 +57,7 @@ def init_rayware_state(state: Dict[str, Any]) -> Dict[str, Any]:
     state.setdefault("current_page", "")
     state.setdefault("print_job_data", {})
 
+    logger.info("[Rayware] 初始化状态节点结束")
     return state
 
 
@@ -94,12 +106,12 @@ def classify_intent_with_log(state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def navigate_to_rayware(state: Dict[str, Any]) -> Dict[str, Any]:
+    logger.info("[Rayware] 导航到 Rayware 主页节点开始")
     """导航到 Rayware 主页"""
     logger.info("📍 导航到 Rayware 主页")
 
     try:
         # 检查是否已经在正确页面
-        from web_tools.web_toolkit import get_driver, selenium_get, smart_click
         driver = get_driver()
 
         if driver is None:
@@ -120,7 +132,7 @@ def navigate_to_rayware(state: Dict[str, Any]) -> Dict[str, Any]:
 
         # 检查是否在 Design Service 系统内
         if "designservice.sprintray.com" in current_url:
-            logger.info("🔍 已在 Design Service 系统内，尝试点击 Rayware 菜单")
+            logger.info("🔍 已在 Design Service 系统内，尝试点击 Print 菜单")
 
             # 等待页面加载完成
             import time
@@ -129,7 +141,7 @@ def navigate_to_rayware(state: Dict[str, Any]) -> Dict[str, Any]:
             # 尝试点击 Rayware 菜单按钮
             max_retries = 3
             for attempt in range(max_retries):
-                logger.info(f"🔄 尝试点击 Rayware 菜单 (第 {attempt + 1} 次)")
+                logger.info(f"🔄 尝试点击 Print 菜单 (第 {attempt + 1} 次)")
 
                 click_result = smart_click.invoke({
                     "param": {
@@ -143,12 +155,12 @@ def navigate_to_rayware(state: Dict[str, Any]) -> Dict[str, Any]:
                              "value": "//a[contains(@class, 'nav-link') and @routerlink='/print-setup']"},
                             # 通过文本内容匹配
                             {"by": "xpath",
-                             "value": "//span[contains(@class, 'nav-item-overflow') and contains(text(), 'RayWare')]"},
-                            {"by": "xpath", "value": "//a[.//span[contains(text(), 'RayWare')]]"},
+                             "value": "//span[contains(@class, 'nav-item-overflow') and contains(text(), 'Print')]"},
+                            {"by": "xpath", "value": "//a[.//span[contains(text(), 'Print')]]"},
                             # 备用选择器
                             {"by": "css", "value": "a[href='/print-setup']"},
                             {"by": "xpath", "value": "//a[@href='/print-setup']"},
-                            {"by": "text", "value": "RayWare"}
+                            {"by": "text", "value": "Print"}
                         ],
                         "wait": 10,
                         "driver": driver  # 显式传递 driver 对象
@@ -156,9 +168,9 @@ def navigate_to_rayware(state: Dict[str, Any]) -> Dict[str, Any]:
                 })
 
                 if click_result.get("status") == "success":
-                    logger.info("✅ 成功点击 Rayware 菜单")
+                    logger.info("✅ 成功点击 Print 菜单")
                     state["current_page"] = "rayware"
-                    state["messages"].append(AIMessage(content="✅ 已进入 Rayware 页面"))
+                    state["messages"].append(AIMessage(content="✅ 已进入 Print 页面"))
 
                     # 等待页面加载
                     time.sleep(3)
@@ -166,7 +178,7 @@ def navigate_to_rayware(state: Dict[str, Any]) -> Dict[str, Any]:
                     # 验证是否成功进入 rayware 页面
                     new_url = driver.current_url
                     if "print-setup" in new_url:
-                        logger.info(f"✅ 确认已进入 Rayware 页面: {new_url}")
+                        logger.info(f"✅ 确认已进入 Print 页面: {new_url}")
                         return state
                     else:
                         logger.warning(f"⚠️ 点击后URL未变化: {new_url}")
@@ -191,23 +203,40 @@ def navigate_to_rayware(state: Dict[str, Any]) -> Dict[str, Any]:
             })
 
             if result.get("status") == "success":
-                logger.info("✅ 成功直接导航到 Rayware")
+                logger.info("✅ 成功直接导航到 Print")
                 state["current_page"] = "rayware"
                 state["messages"].append(AIMessage(content="✅ 已进入 Rayware 页面"))
             else:
                 logger.error(f"❌ 直接导航失败: {result.get('message')}")
+                state["last_error"] = f"导航到 Print 失败: {result.get('message')}"
+                state["rayware_intent"] = "error"
+
+        else:
+            # 不在 Design Service 系统内，直接导航
+            logger.info("🔍 不在 Design Service 系统内，直接导航到 Print")
+            target_url = "https://dev.designservice.sprintray.com/print-setup"
+            logger.info(f"🔄 导航到: {target_url}")
+
+            result = selenium_get.invoke({
+                "url": target_url,
+                "driver": driver
+            })
+
+            if result.get("status") == "success":
+                logger.info("✅ 成功导航到 Print")
+                state["current_page"] = "rayware"
+                state["messages"].append(AIMessage(content="✅ 已进入 Print 页面"))
+            else:
+                logger.error(f"❌ 导航失败: {result.get('message')}")
                 state["last_error"] = f"导航到 Rayware 失败: {result.get('message')}"
                 state["rayware_intent"] = "error"
-        else:
-            logger.error("❌ 不在 Design Service 系统内，无法导航到 Rayware")
-            state["last_error"] = "不在 Design Service 系统内，请先登录"
-            state["rayware_intent"] = "error"
 
     except Exception as e:
-        logger.error(f"❌ 导航过程中发生错误: {e}")
+        logger.error(f"❌ 导航到 Print 失败: {e}")
         state["last_error"] = str(e)
         state["rayware_intent"] = "error"
 
+    logger.info("[Rayware] 导航到 Print 主页节点结束")
     return state
 
 
@@ -224,7 +253,7 @@ def create_print_job_node(state: dict) -> dict:
                 "support_raft": False,
                 "printer": "Pro55S",
                 "build_platform": "Standard",
-                "material": "Model Resin",
+                "material": "OnX Tough 2",
                 "show_advanced": False,
                 "layer_thickness": 100,
                 "fit_offset": 0.0,

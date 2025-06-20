@@ -1246,14 +1246,26 @@ def _get_user_info(user_desc: str) -> dict:
     根据用户描述获取用户信息。
     """
     try:
+        print(f"[_get_user_info] 🔍 开始查找用户: {user_desc}")
+        
         # 加载账号配置
         from utils.account_utils import load_accounts, find_account_by_user
+        print(f"[_get_user_info] 📂 正在加载账号配置...")
         accounts = load_accounts()
+        print(f"[_get_user_info] 📋 加载到的账号数量: {len(accounts)}")
+        print(f"[_get_user_info] 📋 账号列表: {accounts}")
+        
         account = find_account_by_user(user_desc, accounts)
+        print(f"[_get_user_info] 🔍 查找结果: {account}")
         
         if not account:
+            print(f"[_get_user_info] ❌ 未找到用户描述为 '{user_desc}' 的账号")
+            print(f"[_get_user_info] 可用的账号: {[acc.get('description') for acc in accounts]}")
             return None
             
+        print(f"[_get_user_info] ✅ 找到账号: {account.get('description')}")
+        print(f"[_get_user_info] 📝 账号信息: url={account.get('url')}, username={account.get('username')}, password={'*' * len(account.get('password', ''))}")
+        
         return {
             "url": account.get("url"),
             "username": account.get("username"),
@@ -1261,6 +1273,8 @@ def _get_user_info(user_desc: str) -> dict:
         }
     except Exception as e:
         print(f"[_get_user_info] ❌ 获取用户信息失败: {str(e)}")
+        import traceback
+        print(f"[_get_user_info] 🔍 错误详情: {traceback.format_exc()}")
         return None
 
 @tool
